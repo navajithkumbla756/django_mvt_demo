@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Job Portal</title>
+</head>
+<body>
+    <h1>Available Jobs</h1>
+    <hr>
+
+    <ul>
+        {% for job in jobs %}
+            <li>
+                <strong>{{ job.title }}</strong> at {{ job.company_name }}
+                <p>{{ job.description }}</p>
+            </li>
+        {% empty %}
+            <li>No jobs posted yet.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
