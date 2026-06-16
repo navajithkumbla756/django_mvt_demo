@@ -41,7 +41,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
    'rest_framework',
-   'rest_framework_simplejwt',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',  # Enables secure logout blacklisting
     'myapp',
 ]
 
@@ -130,12 +131,20 @@ AUTH_USER_MODEL = 'myapp.customuser'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated', # Protects all endpoints by default
+    ),
 }
 
 # Configure Token Expiration parameters
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),   # Short lifespan for security
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),      # Longer lifespan for user retention
+    'ROTATE_REFRESH_TOKENS': True,                    # Gives a new refresh token whenever a new access token is generated
+    'BLACKLIST_AFTER_ROTATION': True,                 # Invalidates old refresh tokens instantly
+    'UPDATE_LAST_LOGIN': True,                        # Synchronizes native user logs
+    
+    'AUTH_HEADER_TYPES': ('Bearer',),                # Expected token prefix in headers
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
