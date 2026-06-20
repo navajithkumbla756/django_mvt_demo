@@ -1,20 +1,20 @@
 # myapp/urls.py
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
-    UserRegistrationAPIView, 
-    CustomTokenObtainPairView, 
-    UserLogoutAPIView,
-    JobDashboardAPIView
+    JobDashboardAPIView,
+    JobDetailAPIView,
+    ApplicationCreateAPIView,
+    SystemAdminUserMetricsAPIView
 )
 
 urlpatterns = [
-    # Core Authentication Operations Pipeline
-    path('api/auth/signup/', UserRegistrationAPIView.as_view(), name='jwt-signup'),
-    path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='jwt-login'),
-    path('api/auth/logout/', UserLogoutAPIView.as_view(), name='jwt-logout'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(), name='jwt-refresh'),
+    # Job Board Resource Mappings
+    path('api/jobs/', JobDashboardAPIView.as_view(), name='jobs-list-create'),
+    path('api/jobs/<intpk>/', JobDetailAPIView.as_view(), name='jobs-detail-mutate'),
 
-    # Sample Protected Core Business Logic Operations
-    path('api/jobs/', JobDashboardAPIView.as_view(), name='protected-jobs'),
+    # Application Tracking Lifecycle Mappings
+    path('api/applications/', ApplicationCreateAPIView.as_view(), name='candidate-apply'),
+
+    # Admin Control Operations Mappings
+    path('api/admin/metrics/', SystemAdminUserMetricsAPIView.as_view(), name='admin-system-metrics'),
 ]
