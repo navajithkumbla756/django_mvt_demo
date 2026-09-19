@@ -1,0 +1,64 @@
+name: Django CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "feature/ats-models-setup" ]
+  pull_request:
+    branches: [ "main", "feature/ats-models-setup" ]
+
+jobs:
+  test:
+    name: Build & Run Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Project Requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Django System Checks & Migrations
+        env:
+          SECRET_KEY: 'temporary-ci-secret-key-for-test-runner'
+          DEBUG: 'True'
+          ALLOWED_HOSTS: '127.0.0.1,localhost,testserver'
+        run: |
+          python manage.py check
+          python manage.py migrate
+
+      - name: Run Django Tests
+        env:
+          SECRET_KEY: 'temporary-ci-secret-key-for-test-runner'
+          DEBUG: 'True'
+          ALLOWED_HOSTS: '127.0.0.1,localhost,testserver'
+          RAZORPAY_KEY_ID: 'rzp_test_dummy'
+          RAZORPAY_KEY_SECRET: 'dummy_secret'
+        run: |
+          python manage.py test
+
+  deploy:
+    name: Continuous Cloud Deployment
+    needs: test
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/ats-models-setup') && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Remote Deployment via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            chmod +x /var/www/django_app/deploy.sh
+            /var/www/django_app/deploy.sh
