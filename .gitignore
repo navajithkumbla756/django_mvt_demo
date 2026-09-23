@@ -1,0 +1,14 @@
+*.py[cod]
+__pycache__/
+*.log
+local_settings.py
+db.sqlite3
+venv/
+.env
+staticfiles/
+media/
+
+# Ephemeral testing/seeding scripts
+update_models.py
+seed_test_s3.py
+create_test_application.py

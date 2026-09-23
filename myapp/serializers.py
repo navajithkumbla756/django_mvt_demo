@@ -1,16 +1,18 @@
 # myapp/serializers.py
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import CustomUser, Job, Application
+
+from .models import Application, CustomUser, Job
 
 # --- AUTHENTICATION SERIALIZERS ---
 
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6, style={'input_type': 'password'})
+    password = serializers.CharField(write_only=True, min_length=6, style={"input_type": "password"})
 
     class Meta:
         model = CustomUser
-        fields = ['id', 'email', 'name', 'phone', 'role', 'password']
+        fields = ["id", "email", "name", "phone", "role", "password"]
 
     def validate_email(self, value):
         """Secures email uniqueness constraint."""
@@ -25,38 +27,48 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Enriches the standard login response payload to return user metadata alongside tokens."""
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        token['name'] = user.name
-        token['role'] = user.role
+        token["name"] = user.name
+        token["role"] = user.role
         return token
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        data['user'] = {
-            'id': self.user.id,
-            'email': self.user.email,
-            'name': self.user.name,
-            'role': self.user.role
+        data["user"] = {
+            "id": self.user.id,
+            "email": self.user.email,
+            "name": self.user.name,
+            "role": self.user.role,
         }
         return data
 
 
 # --- ATS FEATURE SERIALIZERS (CRITICAL: Missing pieces added back) ---
 
+
 class JobSerializer(serializers.ModelSerializer):
-    company_name = serializers.CharField(source='employer.company_name', read_only=True)
+    company_name = serializers.CharField(source="employer.company_name", read_only=True)
 
     class Meta:
         model = Job
-        fields = ['id', 'company_name', 'title', 'description', 'posted_at']
+        fields = ["id", "company_name", "title", "description", "posted_at"]
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
-    job_title = serializers.CharField(source='job.title', read_only=True)
-    candidate_name = serializers.CharField(source='candidate.user.name', read_only=True)
+    cover_letter = serializers.CharField(required=False, allow_blank=True)
+    job_title = serializers.CharField(source="job.title", read_only=True)
+    candidate_name = serializers.CharField(source="candidate.user.name", read_only=True, default="")
 
     class Meta:
         model = Application
-        fields = ['id', 'job', 'job_title', 'candidate_name', 'cover_letter', 'applied_at']
+        fields = [
+            "id",
+            "job",
+            "job_title",
+            "candidate_name",
+            "cover_letter",
+            "applied_at",
+        ]

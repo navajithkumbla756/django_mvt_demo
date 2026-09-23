@@ -1,103 +1,168 @@
-# myapp/models.py
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.conf import settings
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
+from django.core.validators import FileExtensionValidator
 from django.db import models
+from django.utils import timezone
+
+from myapp.encryption import EncryptedCharField
+from myapp.storage_backends import PrivateResumeStorage
+
+private_storage = PrivateResumeStorage()
+ResumeStorage = PrivateResumeStorage
+
+
+def resume_upload_path(instance, filename: str) -> str:
+    return f"candidates/{instance.user_id}/{filename}"
+
 
 class CustomUserManager(BaseUserManager):
-    """Custom manager enforcing email-based identity authentication instead of usernames."""
-    
     def create_user(self, email, name, password=None, **extra_fields):
         if not email:
-            raise ValueError("The Email field must be set explicitly.")
+            raise ValueError("The Email field must be specified.")
         email = self.normalize_email(email)
         user = self.model(email=email, name=name, **extra_fields)
-        user.set_password(password)  # Securely hashes the plain text password
+        user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, email, name, password=None, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('role', 'ADMIN')
-
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError('Superuser must have is_staff=True.')
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError('Superuser must have is_superuser=True.')
-
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("role", "ADMIN")
         return self.create_user(email, name, password, **extra_fields)
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    """The central authentication identity table for the ATS application platforms."""
-    
-    # 3. Role System Implementation Constants
     ROLE_CHOICES = (
-        ('ADMIN', 'System Administrator'),
-        ('EMPLOYER', 'Corporate Recruiter / Employer'),
-        ('CANDIDATE', 'Job Seeker / Candidate'),
+        ("ADMIN", "Admin"),
+        ("EMPLOYER", "Employer"),
+        ("CANDIDATE", "Candidate"),
     )
-
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True, db_index=True)
     phone = models.CharField(max_length=15, blank=True)
-    role = models.CharField(max_length=15, choices=ROLE_CHOICES, default='CANDIDATE')
-    
-    # Structural Control Status Flags
+    role = models.CharField(max_length=15, choices=ROLE_CHOICES, default="CANDIDATE", db_index=True)
     is_active = models.BooleanField(default=True)
-    is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
-    
-    # Operational Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now, null=True, blank=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
     objects = CustomUserManager()
-
-    # Overriding the default authentication routing keys
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['name']
 
     def __str__(self):
         return f"{self.email} ({self.role})"
 
 
 class Employer(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='employer_profile')
-    company_name = models.CharField(max_length=150)
-    company_website = models.URLField(blank=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="employer_profile",
+    )
+    company_name = models.CharField(max_length=150, blank=True, db_index=True)
+    domain = models.CharField(max_length=100, blank=True)
+    size = models.PositiveIntegerField(default=1)
+    is_verified = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["is_deleted", "company_name"])]
 
     def __str__(self):
-        return self.company_name
+        return self.company_name if self.company_name else f"Workspace of {self.user.email}"
 
 
-class Candidate(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='candidate_profile')
-    resume_headline = models.CharField(max_length=200, blank=True)
-    skills = models.TextField(help_text="Enter comma-separated skills", blank=True)
+class CandidateProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="candidate_profile",
+    )
+    contact_number = EncryptedCharField(max_length=255, blank=True, null=True)
+    skills = models.TextField(blank=True)
+    bio = models.TextField(blank=True)
+    education = models.TextField(blank=True)
+    experience = models.TextField(blank=True)
+    expected_salary = EncryptedCharField(max_length=255, blank=True, null=True)
+    resume = models.FileField(
+        storage=private_storage,
+        upload_to=resume_upload_path,
+        validators=[FileExtensionValidator(allowed_extensions=["pdf", "docx"])],
+        null=True,
+        blank=True,
+    )
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Candidate: {self.user.name}"
+        return f"{self.user.email} Profile"
+
+
+Candidate = CandidateProfile
 
 
 class Job(models.Model):
-    employer = models.ForeignKey(Employer, on_delete=models.CASCADE, related_name='jobs')
-    title = models.CharField(max_length=200)
+    class JobType(models.TextChoices):
+        FULL_TIME = "FULL_TIME", "Full Time"
+        PART_TIME = "PART_TIME", "Part Time"
+        REMOTE = "REMOTE", "Remote"
+        CONTRACT = "CONTRACT", "Contract"
+
+    employer = models.ForeignKey(Employer, on_delete=models.CASCADE, related_name="posted_jobs", db_index=True)
+    title = models.CharField(max_length=255, db_index=True)
     description = models.TextField()
-    posted_at = models.DateTimeField(auto_now_add=True)
+    skills_required = models.TextField(blank=True)
+    experience_required = models.PositiveIntegerField(default=0)
+    location = models.CharField(max_length=255, default="Remote")
+    job_type = models.CharField(max_length=20, choices=JobType.choices, default=JobType.FULL_TIME)
+    salary_min = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    salary_max = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    posted_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.title} - {self.employer.company_name}"
+        return f"{self.title} ({self.employer.company_name})"
 
 
 class Application(models.Model):
-    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='applications')
-    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='applications', null=True, blank=True)
-    cover_letter = models.TextField(blank=True)
-    applied_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ('job', 'candidate')
+    candidate = models.ForeignKey(
+        CandidateProfile,
+        on_delete=models.CASCADE,
+        related_name="applications",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="applications", db_index=True)
+    resume_snapshot = models.FileField(
+        storage=private_storage,
+        upload_to="resumes/snapshots/",
+        validators=[FileExtensionValidator(allowed_extensions=["pdf", "docx"])],
+        max_length=255,
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=30, default="APPLIED", db_index=True)
+    ats_score = models.FloatField(default=0.0, db_index=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, null=True, blank=True, db_index=True)
+    applied_at = models.DateTimeField(default=timezone.now, null=True, blank=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        candidate_name = self.candidate.user.name if self.candidate and self.candidate.user else "Unknown"
-        return f"{candidate_name} -> {self.job.title}"
+        return f"Application #{self.id}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status"], name="app_status_idx"),
+        ]
