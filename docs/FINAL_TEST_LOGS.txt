@@ -1,0 +1,19 @@
+=== ATS PRODUCTION E2E & PERFORMANCE EXECUTION LOGS ===
+Executed at: 2026-09-24 05:23:09 UTC
+
+--- LIFECYCLE & INTEGRATION TESTS ---
+[PASS] 1.1 User Auth (Recruiter JWT)       | Latency:  727.8ms | Token acquired
+[PASS] 1.2 Job Posting Flow                | Latency:   13.2ms | Created Job ID #4
+[PASS] 1.3 Candidate Application           | Latency:    5.0ms | Applied for Job #4
+[PASS] 1.4 AI Interview Workflow           | Latency:    9.5ms | Candidate passed to AI screening
+[PASS] 1.5 Recruiter Payment/Tier Check    | Latency:   12.4ms | Verified active plan & billing
+[PASS] 2.1 AWS S3 SigV4 Integration        | Latency:  135.3ms | Signed S3 pre-signed URL
+[PASS] 2.2 OpenAPI/Swagger Integration     | Latency:   90.9ms | Swagger & Schema online
+[PASS] 2.3 Analytics Engine Integration    | Latency:    7.0ms | 30-day window aggregated
+
+--- PERFORMANCE BENCHMARK TESTS ---
+[WARN] Auth Token Issuance            | Avg: 834.3ms | Min: 720.9ms | Max: 866.4ms
+[PASS] Job Dashboard Query            | Avg:   7.8ms | Min:   7.2ms | Max:   8.4ms
+[PASS] S3 SigV4 Resume Signing        | Avg:   8.1ms | Min:   7.4ms | Max:   8.9ms
+[PASS] Recruiter Funnel Analytics     | Avg:   6.4ms | Min:   6.1ms | Max:   6.6ms
+[PASS] Swagger Interactive Docs       | Avg:   5.0ms | Min:   2.8ms | Max:  12.4ms
