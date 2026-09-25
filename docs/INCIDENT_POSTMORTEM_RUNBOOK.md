@@ -84,3 +84,73 @@ When a faulty commit causes production regressions:
 ### 3.3 Data Recovery & WAL Point-in-Time Recovery (PITR)
 * Ensure automated daily pg_dump backups are stored off-instance (e.g., S3).
 * For point-in-time recovery, replay PostgreSQL Write-Ahead Logs (WAL) up to the exact transaction prior to data corruption.
+
+
+---
+
+## 3. Production Recovery Strategies
+
+### 3.1 Service Restarts & Graceful Reloads
+* **Graceful WSGI Worker Reload (Zero Downtime):**
+  `sudo systemctl reload gunicorn.service`
+* **Hard Restart (Hung / Unresponsive Sockets):**
+  `sudo systemctl restart gunicorn.socket gunicorn.service`
+* **Nginx Configuration Reload:**
+  `sudo nginx -t && sudo systemctl reload nginx`
+
+### 3.2 Deployment Rollbacks
+When a faulty commit causes production regressions:
+1. Locate the last stable commit hash:
+   `git log --oneline -5`
+2. Roll back working tree cleanly:
+   `git checkout <STABLE_COMMIT_HASH>`
+3. Revert database migrations if necessary:
+   `python3 manage.py migrate <app_name> <previous_migration_name>`
+4. Restart application workers:
+   `sudo systemctl restart gunicorn.service`
+
+### 3.3 Data Recovery & WAL Point-in-Time Recovery (PITR)
+* Ensure automated daily `pg_dump` backups are stored off-instance in S3.
+* For transactional recovery without data loss, replay PostgreSQL Write-Ahead Logs (WAL) up to the exact timestamp prior to corruption.
+
+---
+
+## 4. Production Incident Post-Mortem & RCA Template
+
+Every severity 1 or 2 production incident requires a completed Post-Mortem document within 24 hours of resolution.
+
+### Post-Mortem Specification
+
+| Field | Description |
+| :--- | :--- |
+| **Incident Title** | Short descriptive title (e.g., "Gunicorn Worker OOM during Bulk Ingestion") |
+| **Severity** | Sev-1 (Critical Outage) / Sev-2 (Degraded Performance) |
+| **Outage Window** | Start timestamp, end timestamp, and total duration (UTC) |
+| **Lead Responder** | Primary on-call or responding engineer |
+
+### 1. Executive Summary
+Brief non-technical overview of the outage, user impact, and final resolution.
+
+### 2. Impact Metrics
+* **Total Affected Requests / Users:** Number of impacted sessions.
+* **Error Rate Peak:** Maximum percentage of 5xx errors recorded.
+* **SLA & Business Impact:** Financial or contractual impact.
+
+### 3. Incident Timeline (UTC)
+* **HH:MM** - Automated monitoring alert triggered (e.g., HTTP 502 spike).
+* **HH:MM** - Incident responder joined war room and confirmed worker crash via `journalctl`.
+* **HH:MM** - Root cause isolated (e.g., Linux OOM killer invoked due to unbuffered 120MB PDF payload).
+* **HH:MM** - Service restored via socket restart.
+* **HH:MM** - Permanent hotfix deployed and verified.
+
+### 4. Root Cause Analysis (5-Whys Method)
+1. **Why did the API return 502 Bad Gateway?** All Gunicorn worker processes were terminated by the OS.
+2. **Why did the OS terminate workers?** Memory consumption exceeded physical RAM limits, triggering the Linux OOM killer.
+3. **Why did memory spike?** A user uploaded an uncompressed 120MB PDF for inline resume parsing.
+4. **Why did the server accept a 120MB file?** Web server request body limits (`client_max_body_size`) were unset in Nginx.
+5. **Why was it parsed in-process?** Ingestion ran synchronously inside the web worker instead of being offloaded to Celery.
+
+### 5. Corrective & Preventive Measures
+* [x] Enforce Nginx `client_max_body_size 15M;` to reject oversize payloads at the proxy layer.
+* [x] Enforce Celery worker memory ceilings (`CELERY_WORKER_MAX_MEMORY_PER_CHILD = 300000`).
+* [x] Add CloudWatch alarms for EC2 RAM utilization > 80%.
