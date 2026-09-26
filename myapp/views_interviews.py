@@ -4,7 +4,18 @@ from rest_framework.response import Response
 from rest_framework import serializers
 from django.utils import timezone
 from django.db import transaction
-from .models import InterviewRescheduleRequest, Application
+from drf_spectacular.utils import extend_schema
+from .models import InterviewRescheduleRequest
+
+
+ACTION_CHOICES = (
+    ('APPROVE', 'Approve'),
+    ('REJECT', 'Reject'),
+)
+
+class InterviewActionInputSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=ACTION_CHOICES, required=True)
+    reviewer_notes = serializers.CharField(required=False, allow_blank=True)
 
 
 class InterviewRescheduleSerializer(serializers.ModelSerializer):
@@ -36,6 +47,7 @@ class InterviewRescheduleSerializer(serializers.ModelSerializer):
 class InterviewRescheduleListCreateAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=InterviewRescheduleSerializer(many=True))
     def get(self, request):
         user = request.user
         if user.is_staff or getattr(user, 'role', None) in ['RECRUITER', 'EMPLOYER']:
@@ -45,6 +57,7 @@ class InterviewRescheduleListCreateAPIView(APIView):
         serializer = InterviewRescheduleSerializer(qs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @extend_schema(request=InterviewRescheduleSerializer, responses=InterviewRescheduleSerializer)
     def post(self, request):
         serializer = InterviewRescheduleSerializer(data=request.data)
         if serializer.is_valid():
@@ -56,30 +69,34 @@ class InterviewRescheduleListCreateAPIView(APIView):
 class InterviewRescheduleActionAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(request=InterviewActionInputSerializer, responses=InterviewRescheduleSerializer)
     def post(self, request, pk=None):
         user = request.user
         if not (user.is_staff or getattr(user, 'role', None) in ['RECRUITER', 'EMPLOYER']):
             return Response({'detail': 'Only recruiters or staff can review reschedule requests.'}, status=status.HTTP_403_FORBIDDEN)
 
+        input_serializer = InterviewActionInputSerializer(data=request.data)
+        if not input_serializer.is_valid():
+            return Response(input_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
         try:
             req_obj = InterviewRescheduleRequest.objects.select_related('application').get(pk=pk)
         except InterviewRescheduleRequest.DoesNotExist:
-            return Response(serializer.data, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Reschedule request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
 
         if req_obj.status != 'PENDING':
             return Response({'detail': f'Request is already marked as {req_obj.status}.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        decision = request.data.get('action')
-        notes = request.data.get('reviewer_notes', '')
-
-        if decision not in ['APPROVE', 'REJECT']:
-            return Response({'detail': "Action must be either 'APPROVE' or 'REJECT."}, status=status.HTTP_400_BAD_REQUEST)
+        decision = input_serializer.validated_data['uction']
+        notes = input_serializer.validated_data.get('reviewer_notes', '')
 
         with transaction.atomic():
             req_obj.status = 'APPROVE' if decision == 'APPROVE' else 'REJECTED'
             req_obj.rWiewer_notes = notes
-            req_obj.reviewed_at = timezone.now()
+            req_obj.rWiewed_at = timezone.now()
             req_obj.save()
 
-        serializer = InterviewRescheduleSerializer(req_obj)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        result = InterviewRescheduleSerializer(req_obj)
+        return Response(result.data, status=status.HTTP_200_OK)
