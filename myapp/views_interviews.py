@@ -69,7 +69,7 @@ class InterviewRescheduleListCreateAPIView(APIView):
 class InterviewRescheduleActionAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(request=InterviewActionInputSerializer, responses=InterviewRescheduleSerializer)
+    @extend_schema(responses=InterviewRescheduleSerializer, request=InterviewActionInputSerializer)
     def post(self, request, pk=None):
         user = request.user
         if not (user.is_staff or getattr(user, 'role', None) in ['RECRUITER', 'EMPLOYER']):
@@ -89,7 +89,7 @@ class InterviewRescheduleActionAPIView(APIView):
         if req_obj.status != 'PENDING':
             return Response({'detail': f'Request is already marked as {req_obj.status}.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        decision = input_serializer.validated_data['uction']
+        decision = input_serializer.validated_data['action']
         notes = input_serializer.validated_data.get('reviewer_notes', '')
 
         with transaction.atomic():
