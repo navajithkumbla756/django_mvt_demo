@@ -1,3 +1,4 @@
+from .views_interviews import InterviewRescheduleListCreateAPIView, InterviewRescheduleActionAPIView
 from django.urls import path
 from rest_framework_simplejwt.views import (
     TokenBlacklistView,
@@ -18,6 +19,9 @@ from .views_analytics import (
 from .views_documents import ResumeDownloadURLView
 
 urlpatterns = [
+    # Interview Rescheduling Endpoints
+    path("api/interviews/reschedule/", InterviewRescheduleListCreateAPIView.as_view(), name="interview_reschedule_list_create"),
+    path("api/interviews/reschedule/<int:pk>/action/", InterviewRescheduleActionAPIView.as_view(), name="interview_reschedule_action"),
     # System Telemetry & Admin
     path("api/admin/metrics/", SystemAdminUserMetricsAPIView.as_view(), name="admin_metrics"),
     # JWT Authentication Endpoints

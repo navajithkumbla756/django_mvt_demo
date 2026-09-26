@@ -166,3 +166,30 @@ class Application(models.Model):
         indexes = [
             models.Index(fields=["status"], name="app_status_idx"),
         ]
+
+
+class InterviewRescheduleRequest(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('CANCELLED', 'Cancelled'),
+    )
+
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='reschedule_requests')
+    requested_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='interview_reschedules')
+    current_slot = models.DateTimeField()
+    proposed_slot = models.DateTimeField()
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    reviewer_notes = models.TextField(blank=True, null=True)
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'application_interview_reschedules'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Reschedule #{self.id} (App #{self.application_id}) - {self.status}"
